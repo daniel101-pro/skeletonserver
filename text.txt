@@ -1,0 +1,35 @@
+conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(80) UNIQUE NOT NULL,
+        email VARCHAR(120) UNIQUE NOT NULL,
+        password VARCHAR(80)
+    )
+    """)
+    cur.execute("CREATE UNIQUE INDEX idx_users_username_email ON users (username, email)")
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS balance (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(80) UNIQUE NOT NULL,
+        email VARCHAR(120) UNIQUE NOT NULL,
+        balance DECIMAL(10, 2) DEFAULT 0.00,
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        currency VARCHAR(10) DEFAULT 'USD',
+        FOREIGN KEY (username, email) REFERENCES users(username, email)
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(80) UNIQUE NOT NULL,
+        email VARCHAR(120) UNIQUE NOT NULL,
+        task_share_count INT DEFAULT 0,
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (username, email) REFERENCES users(username, email)
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
