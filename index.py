@@ -6,7 +6,7 @@ from flask import request, jsonify
 from flask_socketio import emit
 from routes.auth import signup, login
 from routes.balance import updateBalance
-from routes.ads import ads_handler
+from routes.ads import ads_handler, send_anonymous_message, send_ads_reply, get_ads_reply
 from routes.secrets import secret_handler, secrets_comments_handlers, search_secrets
 from functions.share_to_media import shared_to_media
 #
@@ -96,6 +96,21 @@ def getdetails():
 def connect():
     print("Client connected successfully through sockets")
     emit("message", {"data": "Connected to the server"})
+
+@socketio.on("send_anonymous_message")
+def send_anonymous_message():
+    print("Sending Message")
+    return send_anonymous_message()
+
+@socketio.on("get_ads_reply")
+def ads_reply():
+    print("WWW")
+    return get_ads_reply()
+
+@socketio.on("send_ads_reply")
+def send_ads_reply2():
+    print("Idk just felt like printing shii")
+    return send_ads_reply() 
 
 @socketio.on("disconnect")
 def disconnect():
