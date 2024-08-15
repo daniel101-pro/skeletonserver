@@ -1,6 +1,7 @@
 from flask import request, jsonify, send_from_directory
 from extensions.extensions import get_db_connection, socketio, app
 import secrets
+from constructs.haversine import haversine
 import string
 import datetime
 
@@ -22,7 +23,9 @@ def get_ads():
                     ads_id VARCHAR(80) NOT NULL,
                     email VARCHAR(80) NOT NULL,
                     ad_title VARCHAR(250) NOT NULL,
-                    ads_body VARCHAR(unlimited) NOT NULL,
+                    longitude VARCHAR(250) NOT NULL,
+                    latitude VARCHAR(250) NOT NULL,
+                    ads_body VARCHAR(250) NOT NULL,
                 )
         """)
         conn.commit()
@@ -49,6 +52,8 @@ def add_ad():
     try:
         email = request.form.get('email')
         ad_title = request.form.get('ad_title')
+        longitude = request.form.get("longitude")
+        latitude = request.form.get("latitude")
         ads_body = request.form.get('ads_body')
 
         if not email or not ad_title or not ads_body:
@@ -60,9 +65,9 @@ def add_ad():
         ads_id = generate_unique_ads_id(cur)
 
         cur.execute("""
-            INSERT INTO ads (ads_id, email, ad_title, ads_body)
-            VALUES (%s, %s, %s, %s)
-        """, (ads_id, email, ad_title, ads_body))
+            INSERT INTO ads (ads_id, email, ad_title, ads_body, latitude, longitude)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (ads_id, email, ad_title, ads_body, latitude, longitude))
         conn.commit()
 
         cur.close()
@@ -167,6 +172,7 @@ def send_ads_reply():
             email VARCHAR(80) NOT NULL,
             ads_id VARCHAR(250) NOT NULL,
             reply VARCHAR(250) NOT NULL,
+            gender VARCHAR(80) NOT NULL,
             receiver VARCHAR(80) NOT NULL,
             accepted BOOL NOT NULL DEFAULT FALSE
         )
@@ -224,3 +230,51 @@ def get_ads_reply():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
+
+def filter_ads_by_location():
+    try:
+        # Get the location of the receiver
+        longitude_receiver = float(request.form.get("longitude"))
+        latitude_receiver = float(request.form.get("latitude"))
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Retrieve all ads
+        cur.execute("SELECT ads_id, email, ad_title, longitude, latitude, ads_body FROM ads")
+        ads = cur.fetchall()
+        
+        filtered_ads = []
+
+        # Define a function to check if two coordinates are in the same state
+        def is_same_state(lat1, lon1, lat2, lon2):
+            # Haversine function to calculate distance between two points
+            distance = haversine(lat1, lon1, lat2, lon2)
+            # Assume that within 100 km, it's the same state (adjust as needed)
+            return distance <= 100
+
+        # Filter ads based on location
+        for ad in ads:
+            ad_id, email, ad_title, lon, lat, ads_body = ad
+            if is_same_state(latitude_receiver, longitude_receiver, float(lat), float(lon)):
+                filtered_ads.append({
+                    'ads_id': ad_id,
+                    'email': email,
+                    'ad_title': ad_title,
+                    'longitude': lon,
+                    'latitude': lat,
+                    'ads_body': ads_body
+                })
+
+        cur.close()
+        conn.close()
+
+        # Check if any ads were found in the same state
+        if filtered_ads:
+            return jsonify({'status': 200, 'ads': filtered_ads}), 200
+        else:
+            return jsonify({'status': 404, 'message': 'No ads found in the same state'}), 404
+
+    except Exception as e:
+        return jsonify({'status': 500, 'message': str(e)}), 500
+    
