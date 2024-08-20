@@ -4,11 +4,12 @@
 from extensions.extensions import get_db_connection, app, socketio
 from flask import request, jsonify
 from flask_socketio import emit
-from routes.auth import signup, login
+from routes.auth import signup, login, check_email, get_balance, add_to_balance
 from routes.balance import updateBalance
-from routes.ads import ads_handler, send_anonymous_message, send_ads_reply, get_ads_reply
+from routes.ads import ads_handler, send_anonymous_message, send_ads_reply, get_ads_reply, get_replies_to_ad, get_replies_from_ads
 from routes.secrets import secret_handler, secrets_comments_handlers, search_secrets
 from functions.share_to_media import shared_to_media
+from schemas.get_schemas import getschemas
 #
 # ---- End of Import Statements
 #
@@ -32,9 +33,25 @@ def register_user():
 def signin_user():
     return login()
 
+@app.route("/verify", methods=["GET", "POST"])
+def ver():
+    return check_email()
+
 @app.route("/secrets", methods=["GET", "POST"])
 def secrets():
     return secret_handler()
+
+@app.route("/get_replies_to_ads", methods=["GET", "POST"])
+def get_ads_replies():
+    return get_replies_to_ad()
+
+@app.route("/get_replies_from_ads", methods=["GET", "POST"])
+def get_adss_from_replies():
+    return get_replies_from_ads()
+
+@app.route("/addBalance", methods=["GET", "POST"])
+def addBalance():
+    return add_to_balance()
 
 @app.route("/ads", methods=["GET", "POST"])
 def ads():
@@ -47,6 +64,10 @@ def secret_comments():
 @app.route("/search_secrets", methods=["GET", "POST"])
 def search():
     return search_secrets()
+
+@app.route("/fetch_balance", methods=["GET", "POST"])
+def fetch_balance():
+    return get_balance()
 
 @app.route("/getdetails", methods=["GET", "POST"])
 def getdetails():
@@ -150,8 +171,20 @@ def share():
 
 
 if __name__ == "__main__":
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS otp (
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            otp TEXT NOT NULL,
+            email TEXT NOT NULL,
+            time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()  # Make sure to commit changes
+    cur.close()
+    conn.close()   # Close the connection when done
     socketio.run(app, host="0.0.0.0", port=1234, use_reloader=True, debug=True)
-
 
 #
 #

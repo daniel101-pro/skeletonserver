@@ -11,22 +11,144 @@ def generate_unique_ads_id(cur):
         cur.execute("SELECT 1 FROM ads WHERE secret_id = %s", (ads_id,))
         if not cur.fetchone():
             return ads_id
+        
+def get_replies_from_ads():
+    try:
+        email = request.form.get("email")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS request_replies (
+                id SERIAL PRIMARY KEY,
+                ads_id INTEGER NOT NULL,
+                email_ads VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                reply TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+        """)
+        cur.execute("""
+            SELECT ads_id, email_ads, email, reply FROM request_replies WHERE email = %s
+        """, (email,))
+        request_replies = cur.fetchall()
+
+        if request_replies is not None:
+            return jsonify({'message': "fetched succesfuly", "status": 200, 'request_replies': request_replies})
+        else:
+            return jsonify({"message": "Error In fetching", "status": 404}), 404
+    except Exception as e:
+        return jsonify({"messge": 'Network Error', "status": 500, 'exception': str(e)}), 500    
+
+
+def get_replies_to_ad():
+    try:
+        email_a = request.form.get("email")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS request_replies (
+                id SERIAL PRIMARY KEY,
+                ads_id INTEGER NOT NULL,
+                email_ads VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                reply TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+        """)
+        cur.execute("""
+            SELECT ads_id, email_ads, reply FROM request_replies WHERE email_ads = %s
+        """, (email_a,))
+        request_replies = cur.fetchall()
+        
+        if request_replies is not None:
+            return jsonify({"message": 'Fetched successfully', 'status': 200, 'request_replies': request_replies}), 200
+        else:
+            return jsonify({"message": "Error In fetching", "status": 404}), 404
+    except Exception as e:
+        return jsonify({"messge": 'Network Error', "status": 500, 'exception': str(e)}), 500    
+
+
+def reply_ad():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Create the table if it doesn't exist
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS request_replies (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ads_id VARCHAR(80) NOT NULL,
+                email_ads VARCHAR(80) NOT NULL,
+                email VARCHAR(80) NOT NULL,
+                reply TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Insert a new reply
+        ads_id = request.form.get('ads_id')
+        email = request.form.get('email')
+        reply = request.form.get('reply')
+
+        cur.execute("""
+            INSERT INTO request_replies (ads_id, email, reply)
+            VALUES (%s, %s, %s)
+        """, (ads_id, email, reply))
+
+        conn.commit()
+        return jsonify({'status': 200, 'message': 'Reply added successfully'}), 200
+    
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+    finally:
+        cur.close()
+        conn.close()
+
 
 
 def get_ads():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+
+        # Check if the columns already exist before trying to add them
+        cur.execute("SHOW COLUMNS FROM ads LIKE 'city'")
+        result = cur.fetchone()
+        if not result:
+            cur.execute("ALTER TABLE ads ADD COLUMN city VARCHAR(100)")
+        
+        cur.execute("SHOW COLUMNS FROM ads LIKE 'state'")
+        result = cur.fetchone()
+        if not result:
+            cur.execute("ALTER TABLE ads ADD COLUMN state VARCHAR(100)")
+
+        cur.execute("SHOW COLUMNS FROM ads LIKE 'country'")
+        result = cur.fetchone()
+        if not result:
+            cur.execute("ALTER TABLE ads ADD COLUMN country VARCHAR(100)")
+
+        cur.execute("SHOW COLUMNS FROM ads LIKE 'reviewed'")
+        result = cur.fetchone()
+        if not result:
+            cur.execute("ALTER TABLE ads ADD COLUMN reviewed BOOL DEFAULT false")
+
+        # Create the ads table if it doesn't exist
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS ads (
-                    id AUTO_INCREMENT PRIMARY KEY,
-                    ads_id VARCHAR(80) NOT NULL,
-                    email VARCHAR(80) NOT NULL,
-                    ad_title VARCHAR(250) NOT NULL,
-                    longitude VARCHAR(250) NOT NULL,
-                    latitude VARCHAR(250) NOT NULL,
-                    ads_body VARCHAR(250) NOT NULL,
-                )
+           CREATE TABLE IF NOT EXISTS ads (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ads_id VARCHAR(80) NOT NULL,
+                email VARCHAR(80) NOT NULL,
+                ad_title VARCHAR(250) NOT NULL,
+                ads_body VARCHAR(250) NOT NULL,
+                city VARCHAR(100),
+                state VARCHAR(100),
+                country VARCHAR(100),
+                reviewed BOOL DEFAULT false
+            )
         """)
         conn.commit()
 
@@ -47,6 +169,7 @@ def get_ads():
 
     except Exception as e:
         return jsonify({'status': 500, 'message': str(e)}), 500
+
     
 def add_ad():
     try:
@@ -100,9 +223,9 @@ def get_ad_by_id(ads_id):
     
 def ads_handler():
     if request.method == "POST":
-        return get_ads()
-    elif request.method == "GET":
         return add_ad()
+    elif request.method == "GET":
+        return get_ads()
 
 def send_anonymous_message():
     email = request.form.get("email")

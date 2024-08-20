@@ -1,14 +1,15 @@
-import secrets
-import string
 from flask import jsonify, request
 from extensions.extensions import app, socketio, get_db_connection
+import secrets
+import string
 
 def generate_unique_secret_id(cur):
     while True:
-        secret_id = ''.join(secrets.choice(string.ascii_letters + string.digits + string.punctuation) for _ in 18)
+        secret_id = ''.join(secrets.choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(18))
         cur.execute("SELECT 1 FROM secrets WHERE secret_id = %s", (secret_id,))
         if not cur.fetchone():
             return secret_id
+
 
 def add_a_secret():
     try:
@@ -19,13 +20,14 @@ def add_a_secret():
         
         cur.execute("""
             CREATE TABLE IF NOT EXISTS secrets (
-                id INT PRIMARY KEY AUTO_INCREMENT,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 secret_id VARCHAR(256) UNIQUE NOT NULL,
                 secret_body VARCHAR(256) NOT NULL,
                 email VARCHAR(80) NOT NULL,
-                likes JSON DEFAULT '[]'
+                likes TEXT
             )
         """)
+
 
         secret_id = generate_unique_secret_id(cur)
         
@@ -35,12 +37,13 @@ def add_a_secret():
         """, (secret_id, secret, email))
         
         conn.commit()
+        cur.close()
+        conn.close()
         return jsonify({"message": "Secret added successfully!", "secret_id": secret_id, "status": 200}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+        
+
 
 
 def get_secrets():
@@ -50,28 +53,41 @@ def get_secrets():
         cur = conn.cursor()
 
         cur.execute("""
+            CREATE TABLE IF NOT EXISTS secrets (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                secret_id VARCHAR(256) UNIQUE NOT NULL,
+                secret_body VARCHAR(256) NOT NULL,
+                email VARCHAR(80) NOT NULL,
+                likes JSON
+            )
+        """)
+
+        cur.execute("""
             SELECT secret_id, secret_body, email, likes 
             FROM secrets 
             ORDER BY id ASC 
             LIMIT 10
         """)
         secrets = cur.fetchall()
+        cur.close()
+        conn.commit()
+        conn.close()
+        if secrets is not None:
 
-        secrets_list = []
-        for secret in secrets:
-            secrets_list.append({
-                "secret_id": secret[0],
-                "secret_body": secret[1],
-                "email": secret[2],
-                "likes": secret[3]
-            })
+            secrets_list = []
+            for secret in secrets:
+                secrets_list.append({
+                    "secret_id": secret[0],
+                    "secret_body": secret[1],
+                    "email": secret[2],
+                    "likes": secret[3]
+                })
 
-        return jsonify({"secrets": secrets_list, "status": 200}), 200
+            return jsonify({"secrets": secrets_list, "status": 200}), 200
+        else:
+            return jsonify({"status": 404, "message": 'secresttypeshii'}), 404
     except Exception as e:
         return jsonify({"error": str(e), "status": 500}), 500
-    finally:
-        cur.close()
-        conn.close()
 
 def secret_handler():
     if request.method == "POST":
@@ -107,6 +123,8 @@ def add_secret_comment():
         """, (secret_id, email, comment))
         
         conn.commit()
+        cur.close()
+        conn.close()
         # Emit the comment and email to update the comment section in real-time
         socketio.emit("update_comment_section", {
             "comment": comment,
@@ -115,9 +133,7 @@ def add_secret_comment():
         return jsonify({"message": "Comment added successfully!", "status": 200}), 200
     except Exception as e:
         return jsonify({"error": str(e), "status": 500}), 500
-    finally:
-        cur.close()
-        conn.close()
+        
 
 def search_secrets():
     try:
@@ -155,8 +171,10 @@ def search_secrets():
 
 def get_secret_comments():
     try:
-        email = request.form.get("email")
-        secret_id = request.form.get("secret_id")
+        # Retrieve the 'email' and 'secret_id' from the query parameters
+        email = request.args.get("email")
+        secret_id = request.args.get("secret_id")
+
         conn = get_db_connection()
         cur = conn.cursor()
 
@@ -180,12 +198,13 @@ def get_secret_comments():
                 "created_at": comment[3]
             })
 
-        return jsonify({"comments": comments_list, "status":200}), 200
+        return jsonify({"comments": comments_list, "status": 200}), 200
     except Exception as e:
         return jsonify({"error": str(e), "status": 500}), 500
     finally:
         cur.close()
         conn.close()
+
 
 def secrets_comments_handlers():
     if request.method == "POST":
