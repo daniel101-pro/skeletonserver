@@ -47,7 +47,7 @@ def get_ads_replies():
 
 @app.route("/get_replies_from_ads", methods=["GET", "POST"])
 def get_adss_from_replies():
-    return get_replies_from_ads()
+    return get_ads_reply()
 
 @app.route("/addBalance", methods=["GET", "POST"])
 def addBalance():
@@ -92,6 +92,9 @@ def getdetails():
     else:
         return jsonify({"status": "false"}), 200
 
+@app.route("/send_ads_replyy", methods=["GET", "POST"])
+def ads_reply_type():
+    return send_ads_reply()
 
 #
 #

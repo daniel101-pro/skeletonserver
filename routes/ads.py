@@ -7,8 +7,11 @@ import datetime
 
 def generate_unique_ads_id(cur):
     while True:
-        ads_id = ''.join(secrets.choice(string.ascii_letters + string.digits + string.punctuation) for _ in 18)
-        cur.execute("SELECT 1 FROM ads WHERE secret_id = %s", (ads_id,))
+        # Generate a unique ID of length 18
+        ads_id = ''.join(secrets.choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(18))
+        
+        # Check if the generated ID already exists in the database
+        cur.execute("SELECT 1 FROM ads WHERE ads_id = %s", (ads_id,))
         if not cur.fetchone():
             return ads_id
         
@@ -135,6 +138,7 @@ def get_ads():
         result = cur.fetchone()
         if not result:
             cur.execute("ALTER TABLE ads ADD COLUMN reviewed BOOL DEFAULT false")
+            
 
         # Create the ads table if it doesn't exist
         cur.execute("""
@@ -153,10 +157,7 @@ def get_ads():
         conn.commit()
 
         email = request.form.get('email')
-        if email:
-            cur.execute("SELECT * FROM ads WHERE email = %s", (email,))
-        else:
-            cur.execute("SELECT * FROM ads")
+        cur.execute("SELECT * FROM ads")
 
         ads = cur.fetchall()
         cur.close()
@@ -170,27 +171,38 @@ def get_ads():
     except Exception as e:
         return jsonify({'status': 500, 'message': str(e)}), 500
 
+
     
 def add_ad():
     try:
         email = request.form.get('email')
-        ad_title = request.form.get('ad_title')
-        longitude = request.form.get("longitude")
-        latitude = request.form.get("latitude")
         ads_body = request.form.get('ads_body')
+        city = request.form.get("city")
+        state = request.form.get("state")
+        country = request.form.get('country')
 
-        if not email or not ad_title or not ads_body:
+        if not email or not city or not state or not country or not ads_body:
             return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
 
         conn = get_db_connection()
         cur = conn.cursor()
 
         ads_id = generate_unique_ads_id(cur)
+        amount = 10
 
+        # Update user balance
         cur.execute("""
-            INSERT INTO ads (ads_id, email, ad_title, ads_body, latitude, longitude)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (ads_id, email, ad_title, ads_body, latitude, longitude))
+            UPDATE users
+            SET balance = balance - %s
+            WHERE email = %s
+        """, (amount, email))
+
+        # Insert new ad
+        cur.execute("""
+            INSERT INTO ads (ads_id, email, ad_title, ads_body, city, state, country)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (ads_id, email, ads_body, ads_body, city, state, country))
+
         conn.commit()
 
         cur.close()
@@ -288,6 +300,7 @@ def send_ads_reply():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        print(f"eeee: {receiver}")
         
         cur.execute("""
             CREATE TABLE IF NOT EXISTS ads_reply (
@@ -295,11 +308,19 @@ def send_ads_reply():
             email VARCHAR(80) NOT NULL,
             ads_id VARCHAR(250) NOT NULL,
             reply VARCHAR(250) NOT NULL,
-            gender VARCHAR(80) NOT NULL,
+            gender VARCHAR(80) NOT NULL DEFAULT 'male',
             receiver VARCHAR(80) NOT NULL,
             accepted BOOL NOT NULL DEFAULT FALSE
         )
         """)
+
+        try:
+            cur.execute("""
+                ALTER TABLE ads_reply
+                    ALTER COLUMN gender SET DEFAULT 'male';
+            """)
+        except Exception as e:
+            print(f"Error with exception: {e}")
         
         cur.execute("""
             INSERT INTO ads_reply (email, ads_id, reply, receiver)
@@ -323,13 +344,17 @@ def get_ads_reply():
         cur = conn.cursor()
         
         # Fetch all ads replies with accepted = False
+        print(f"receiver: {str(receiver)}")
+        receiver = str(receiver.strip()) if receiver else None
+        print(f"receiver after strip: {receiver}")
+
         cur.execute("""
             SELECT ads_id, email, reply, receiver 
-            FROM ads_reply 
-            WHERE accepted = FALSE
-            AND WHERE email = %s AND receiver = %s
-        """, (email, receiver))
+            FROM ads_reply WHERE email = %s
+            
+        """, (receiver,))
         replies = cur.fetchall()
+        print(f"REceiver: {replies}")
         
         cur.close()
         conn.close()
@@ -344,11 +369,12 @@ def get_ads_reply():
             }
             for reply in replies
         ]
+        print(f"repliesList: {replies_list}")
 
         # Emit the list of ads replies using socketio
         socketio.emit('ads_replies_list', {'replies': replies_list})
 
-        return jsonify({'message': 'Ads replies retrieved successfully'}), 200
+        return jsonify({'message': 'Ads replies retrieved successfully', 'replies': replies_list, 'status': 200}), 200
 
     except Exception as e:
         return jsonify({'message': str(e)}), 500
